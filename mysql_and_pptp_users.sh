@@ -34,7 +34,7 @@ fi
 mkdir -p $BACKFOLDER
 
 mysql_query() {
-        /usr/bin/mysql --defaults-file=$AUTHFILE -BN -e "$1"
+    /usr/bin/mysql --defaults-file=$AUTHFILE -BN -e "$1"
 }
 
 
@@ -42,18 +42,14 @@ backupsGrants() {
 	
 	VERSION=$(mysql --defaults-file=$AUTHFILE -BN -e "SELECT @@version;")
 	VERSION=`echo ${VERSION:0:3} |sed 's/\.//g'`
-        if [ "$VERSION" -gt 56 ]; then
-                #whiptail --title "MySQL query error" --msgbox "Detail: \n [ !WARNING! ] MySQL version 5.7 and higher not supported temorary. Backup users and grants not saved!" 30 120
-		#echo "[ !WARNING! ] MySQL $VERSION not supported temorary. Backup users and grants not saved!"
-                #exit 1;
-		
+    if [ "$VERSION" -gt 56 ]; then
 		for i in `mysql --defaults-file=$AUTHFILE -BN -e "SELECT CONCAT('\'', user, '\'@\'', host, '\'') AS query FROM mysql.user;"`;
 		do
 			echo -e "## Create user and grants for $i ##";
 			mysql --defaults-file=$AUTHFILE -BN -e "SHOW CREATE USER $i; SHOW GRANTS FOR $i;";
 			echo -e "### \n";
 		done >> $BACKFOLDER/$BACKFILE
-        else
+    else
 		mysql --defaults-file=$AUTHFILE -B -N -e "SELECT DISTINCT CONCAT('SHOW GRANTS FOR \'', user, '\'@\'', host, '\';') AS query FROM mysql.user" | mysql --defaults-file=$AUTHFILE | sed 's/\(GRANT .*\)/\1;/;s/^\(Grants for .*\)/## \1 ##/;/##/{x;p;x;}' >> $BACKFOLDER/$BACKFILE
 	fi
 }
@@ -63,68 +59,64 @@ OPTION=$(whiptail --title "MySQL User Management" --menu "Select an action" 15 6
 
 case "$OPTION" in 
      1)
-	USER=$(whiptail --title "New User" --inputbox "Input new Username" 10 60 3>&1 1>&2 2>&3)
-	HOST=$(whiptail --title "Allow host" --inputbox "Input hostname or IP address" 10 60 % 3>&1 1>&2 2>&3)
-	PASSWORD=$(whiptail --title "MySQL User Management" --passwordbox "Input password" 10 60 3>&1 1>&2 2>&3)
-	CONFIRM=$(whiptail --title "MySQL User Management" --passwordbox "Confirm password" 10 60 3>&1 1>&2 2>&3)
-		if [ -n "$USER" ] && [ -n "$PASSWORD" ]; then
-			if [ $PASSWORD == $CONFIRM ]; then
-				GRANTS=$(whiptail --title "MySQL User Management" --checklist "Select the grants for new user" 30 60 23 "ALL_PRIVILEGES" "" OFF "SELECT" "" OFF "INSERT" "" OFF "UPDATE" "" OFF "DELETE" "" OFF "FILE" "" OFF "CREATE" "" OFF "ALTER" "" OFF "INDEX" "" OFF "DROP" "" OFF "CREATE_TEMPORARY_TABLES" "" OFF "GRANT" "" OFF "SUPER" "" OFF "PROCESS" "" OFF "RELOAD" "" OFF "SHOW_DATABASES" "" OFF "REFERENCES" "" OFF "LOCK_TABLES" "" OFF "EXECUTE" "" OFF "REPLICATION_CLIENT" "" OFF "REPLICATION_SLAVE" "" OFF 3>&1 1>&2 2>&3)
-				GRANTS=$(echo $GRANTS| tr -d \" | sed 's/ /, /g'|sed 's/_/ /g')
-				
-				if [ -n "$GRANTS" ]; then
-					QUERY="CREATE USER '$USER'@'$HOST' IDENTIFIED BY '$PASSWORD'; GRANT $GRANTS ON * . * TO '$USER'@'$HOST'; FLUSH PRIVILEGES;"
-					mysql_query "$QUERY"
-					backupsGrants
+		USER=$(whiptail --title "New User" --inputbox "Input new Username" 10 60 3>&1 1>&2 2>&3)
+		HOST=$(whiptail --title "Allow host" --inputbox "Input hostname or IP address" 10 60 % 3>&1 1>&2 2>&3)
+		PASSWORD=$(whiptail --title "MySQL User Management" --passwordbox "Input password" 10 60 3>&1 1>&2 2>&3)
+		CONFIRM=$(whiptail --title "MySQL User Management" --passwordbox "Confirm password" 10 60 3>&1 1>&2 2>&3)
+			if [ -n "$USER" ] && [ -n "$PASSWORD" ]; then
+				if [ $PASSWORD == $CONFIRM ]; then
+					GRANTS=$(whiptail --title "MySQL User Management" --checklist "Select the grants for new user" 30 60 23 "ALL_PRIVILEGES" "" OFF "SELECT" "" OFF "INSERT" "" OFF "UPDATE" "" OFF "DELETE" "" OFF "FILE" "" OFF "CREATE" "" OFF "ALTER" "" OFF "INDEX" "" OFF "DROP" "" OFF "CREATE_TEMPORARY_TABLES" "" OFF "GRANT" "" OFF "SUPER" "" OFF "PROCESS" "" OFF "RELOAD" "" OFF "SHOW_DATABASES" "" OFF "REFERENCES" "" OFF "LOCK_TABLES" "" OFF "EXECUTE" "" OFF "REPLICATION_CLIENT" "" OFF "REPLICATION_SLAVE" "" OFF 3>&1 1>&2 2>&3)
+					GRANTS=$(echo $GRANTS| tr -d \" | sed 's/ /, /g'|sed 's/_/ /g')
 					
-					if [ $? = 0 ]; then
-						whiptail --title "Successful" --msgbox "User \"$USER\" successful created. \n\n List of privilege user \"$USER\": \n $GRANTS \n\n Saved to file: $BACKFOLDER/$BACKFILE" 15 70
+					if [ -n "$GRANTS" ]; then
+						QUERY="CREATE USER '$USER'@'$HOST' IDENTIFIED BY '$PASSWORD'; GRANT $GRANTS ON * . * TO '$USER'@'$HOST'; FLUSH PRIVILEGES;"
+						mysql_query "$QUERY"
+						backupsGrants
+						
+						if [ $? = 0 ]; then
+							whiptail --title "Successful" --msgbox "User \"$USER\" successful created. \n\n List of privilege user \"$USER\": \n $GRANTS \n\n Saved to file: $BACKFOLDER/$BACKFILE" 15 70
+						else
+							whiptail --title "MySQL query error" --msgbox "Detail: \n CREATE USER '$USER'@'$HOST' IDENTIFIED BY '$PASSWORD'; \n GRANT $GRANTS ON * . * TO '$USER'@'$HOST'; \n FLUSH PRIVILEGES;" 30 120
+						fi
 					else
-						whiptail --title "MySQL query error" --msgbox "Detail: \n CREATE USER '$USER'@'$HOST' IDENTIFIED BY '$PASSWORD'; \n GRANT $GRANTS ON * . * TO '$USER'@'$HOST'; \n FLUSH PRIVILEGES;" 30 120
+						whiptail --title "Error" --msgbox "You have not selected GRANTS" 10 50
+						$0
 					fi
 				else
-					whiptail --title "Error" --msgbox "You have not selected GRANTS" 10 50
+					whiptail --title "Error" --msgbox "Passwords do not match." 10 50
 					$0
 				fi
-			else
-				whiptail --title "Error" --msgbox "Passwords do not match." 10 50
-				$0
 			fi
-		fi
 	;;
+
      2)
-	QUERY="SELECT CONCAT('\'', user, '\'@\'', host, '\'') AS query FROM mysql.user;"
-	LIST=$(mysql_query "$QUERY")
-	RESULT=$(whiptail --title "User list" --inputbox "List MySQL Uuser: \n\n $LIST \n\n\n Enter the full username from the list to delete." 30 60 3>&1 1>&2 2>&3)
+		QUERY="SELECT CONCAT('\'', user, '\'@\'', host, '\'') AS query FROM mysql.user;"
+		LIST=$(mysql_query "$QUERY")
+		RESULT=$(whiptail --title "User list" --inputbox "List MySQL Uuser: \n\n $LIST \n\n\n Enter the full username from the list to delete." 30 60 3>&1 1>&2 2>&3)
 	
 	if [ -n "$RESULT" ]; then
+		
 		QUERY="DROP USER $RESULT"
 		mysql_query "$QUERY"
 		
 		if [ $? = 0 ]; then
-                	backupsGrants
-                	whiptail --title "Successful" --msgbox "User \"$RESULT\" successful droped. \n\n Saved to file: $BACKFOLDER/$BACKFILE" 15 70
+                backupsGrants
+                whiptail --title "Successful" --msgbox "User \"$RESULT\" successful droped. \n\n Saved to file: $BACKFOLDER/$BACKFILE" 15 70
         	else
-                	whiptail --title "MySQL query error" --msgbox "Detail: \n $QUERY" 30 120
-                	$0
+                whiptail --title "MySQL query error" --msgbox "Detail: \n $QUERY" 30 120
+                $0
         	fi
 	else
 		$0
 	fi
-		
-	#if [ $? = 0 ]; then
-	#	backupsGrants
-	#	whiptail --title "Successful" --msgbox "User \"$RESULT\" successful droped. \n\n Saved to file: $BACKFOLDER/$BACKFILE" 15 70
-	#else
-	#	whiptail --title "MySQL query error" --msgbox "Detail: \n $QUERY" 30 120
-	#	$0
-	#fi
 	;;
+
      3)
 	QUERY="SELECT CONCAT(' - ', '\'', user, '\'@\'', host, '\'') AS query FROM mysql.user;"
 	LIST=$(mysql_query "$QUERY")
 	whiptail --title "List Users" --msgbox "List MySQL Users: \n\n $LIST" 50 120
 	;;
+
      4)
 	backupsGrants
 	if [ $? = 0 ]; then
@@ -133,13 +125,15 @@ case "$OPTION" in
 		whiptail --title "MySQL query error" --msgbox "Detail: $?" 10 40
 	fi
 	;;
+
      -)
-	$0
+	 $0
 	;;
+
      5)
 	if [ -w "/etc/ppp/chap-secrets" ]; then 
 		USER=$(whiptail --title "PPTP User Management" --inputbox "Enter new PPTP username" 10 60 3>&1 1>&2 2>&3)
-        	PASSWORD=$(whiptail --title "PPTP User Management" --passwordbox "Enter PPTP password" 10 60 3>&1 1>&2 2>&3)
+        PASSWORD=$(whiptail --title "PPTP User Management" --passwordbox "Enter PPTP password" 10 60 3>&1 1>&2 2>&3)
 		
 		echo -e "$USER\t*\t\"$PASSWORD\"\t*" >> /etc/ppp/chap-secrets
 		whiptail --title "Successful" --msgbox "PPTP user $USER successful created. \n\n [ WARNING ] PPTP Daemon need restart." 10 60
@@ -147,6 +141,7 @@ case "$OPTION" in
 		whiptail --title "Error" --msgbox "[ ERROR ] File /etc/ppp/chap-secrets not exist or not writable" 10 60
 	fi
 	;;
+
      6)
 	if [ -w "/etc/ppp/chap-secrets" ]; then
 		USER=$(whiptail --title "New User" --inputbox "Enter username for to delete" 10 60 3>&1 1>&2 2>&3)
@@ -159,7 +154,7 @@ case "$OPTION" in
 			whiptail --title "Error" --msgbox "[ ERROR ] User $USER not found" 10 40
 		fi
         else
-                whiptail --title "Error" --msgbox "[ ERROR ] File /etc/ppp/chap-secrets not exist or not writable" 10 60
+            whiptail --title "Error" --msgbox "[ ERROR ] File /etc/ppp/chap-secrets not exist or not writable" 10 60
         fi
 	;;
 esac
